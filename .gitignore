@@ -1,4 +1,6 @@
 .python-version
+docs/RL_notes.txt
+reinforcement_learning/models
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
