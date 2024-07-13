@@ -1,7 +1,7 @@
 # import and stuff
 import os
 import gymnasium as gym
-from gymnasium.wrappers import GrayScaleObservation, ResizeObservation, FrameStack
+from gymnasium.wrappers import GrayScaleObservation, ResizeObservation, FrameStack, RecordVideo
 import random
 from collections import deque
 import numpy as np
@@ -16,13 +16,13 @@ import math
 import logging
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+# print(device)
 
-# new directory for this training session within reinforcement_learning/models/
+# new directory for this training session within reinforcement_learning/models/ and setup for logging
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 training_dir = os.path.join('reinforcement_learning', 'models', f'training_{timestamp}')
 os.makedirs(training_dir, exist_ok=True)
-
-# setup for logging
 log_filename = os.path.join(training_dir, 'training_log.txt')
 logging.basicConfig(filename=log_filename, level=logging.INFO, format='%(asctime)s %(message)s')
 
@@ -118,10 +118,6 @@ class Agent:
         loss.backward()
         self.optimizer.step()
 
-        # Update epsilon (inital version)
-        # self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
-        # print("Epsilon set to: "+ str(self.epsilon))
-
     def update_target_network(self):
         """Update the weights of the target network to match those of the policy network."""
         self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -147,16 +143,27 @@ plt.figure(figsize=(12, 6))
 
 # main training loop
 num_episodes = 1000  # Total number of episodes to train
-save_interval = 200  # How often to save the model
-print_every = 20     # How often to print the average reward
+save_interval = 100  # How often to save the model
+print_every = 10     # How often to print the average reward
+enable_recording = True
 episode_rewards = []  # List to store total rewards for each episode
 epsilon_values = []   # List to store epsilon values for each episode
 
+def capped_cubic_video_schedule(episode_id: int) -> bool:
+    if episode_id < 150:
+        return int(round(episode_id ** (1.0 / 3))) ** 3 == episode_id
+    else:
+        return episode_id % 50 == 0
+    
 for episode in range(num_episodes):
     state, _ = env.reset()  # Reset the environment and obtain the initial state
     state = torch.tensor(np.array(state), dtype=torch.float32).unsqueeze(0).to(device) / 255.0  # Process state for DQN input
     total_reward = 0
     done = False
+
+    # Initialize counters for negative rewards and steps
+    negative_reward_counter = 0
+    step_counter = 0
 
     # Initial 50-step delay
     for _ in range(50):
@@ -171,11 +178,33 @@ for episode in range(num_episodes):
         next_state = torch.tensor(np.array(next_state), dtype=torch.float32).unsqueeze(0).to(device) / 255.0  # Process next_state
         done = done or truncated
 
+        # Increase the negative reward counter if the reward is negative after a certain time frame
+        negative_reward_counter = negative_reward_counter + 1 if step_counter > 100 and reward < 0 else 0
+        # Printing step updates:
+        # if (negative_reward_counter != 0 and negative_reward_counter%5==0) or step_counter % 25 == 0:
+        #     print("negative_reward_couter: ", negative_reward_counter, " step_counter: ", step_counter, " reward: ", round(reward,2))
+        if reward < -1:
+            print("episode: ", episode, " step_counter: ", step_counter, " negative_reward_couter: ", negative_reward_counter, " reward: ", round(reward,2))
+        if reward > 0:
+            print("episode: ", episode, " step_counter: ", step_counter, " negative_reward_couter: ", negative_reward_counter, " reward: ", round(reward,2))
+        # Check if negative reward counter exceeds threshold
+        if negative_reward_counter > 25:
+            done = True
+            reward = -100  # Large negative reward for terminating the episode early
+            print("episode: ", episode, " step_counter: ", step_counter, " negative_reward_couter: ", negative_reward_counter, " reward: ", round(reward,2))
+            print("aborted due to negative_reward_counter")
+        
+        # Extra bonus 
+        # if action == 3 and reward>0:  
+        #     reward *= 1.5
+        #     print("bonus")
+
         agent.store_experience(state, action, reward, next_state, done)  # Store experience in the buffer
         agent.learn()  # Allow the agent to learn from the buffer
 
         state = next_state  # Move to the next state
         total_reward += reward
+        step_counter += 1
 
         if agent.current_step % agent.target_update_frequency == 0:
             agent.update_target_network()
@@ -188,15 +217,53 @@ for episode in range(num_episodes):
     epsilon_values.append(agent.epsilon_threshold)
 
     if episode % print_every == 0:
-        avg_reward = np.mean(episode_rewards[-print_every:])
-        print(f'Episode {episode}: Total reward = {total_reward}, Average reward = {avg_reward:.4f}, Epsilon = {agent.epsilon_threshold:.4f}')
-        logging.info(f'Episode {episode}: Total reward = {total_reward}, Average reward = {avg_reward:.4f}, Epsilon = {agent.epsilon_threshold:.4f}')
-
+        if len(episode_rewards) >= 50:
+            avg_reward = np.mean(episode_rewards[-50:])  # Average reward over the last 50 episodes
+        else:
+            avg_reward = np.mean(episode_rewards)  # Average reward over all episodes so far if less than 50
+        print(f'Episode {episode} ({step_counter} steps): Total reward = {total_reward}, 50-episode Average reward = {avg_reward:.4f}, Epsilon = {agent.epsilon_threshold:.4f}')
+        logging.info(f'Episode {episode} ({step_counter} steps): Total reward = {total_reward}, 50-episode Average reward = {avg_reward:.4f}, Epsilon = {agent.epsilon_threshold:.4f}')
 
     if episode % save_interval == 0:
         model_filename = os.path.join(training_dir, f'dqn_model_{episode}_episodes.pth')
         torch.save(agent.policy_net.state_dict(), model_filename)
         print(f'Model saved: {model_filename}')
+
+    # Record video at specified intervals
+    if enable_recording and (capped_cubic_video_schedule(episode) or reward - avg_reward > 50):
+        current_timestamp = datetime.now().strftime('%H%M%S')
+        video_dir = os.path.join(training_dir, 'videos', f'recording_ep_{episode}_{current_timestamp}')
+        os.makedirs(video_dir, exist_ok=True)
+
+        log_file = os.path.join(video_dir, 'recording_log.txt')
+        with open(log_file, 'a') as f:
+            f.write(f"Timestamp: {current_timestamp}\n"
+                    f"Episode: {episode}\n"
+                    f"Step Counter: {step_counter}\n"
+                    f"Negative Reward Counter: {negative_reward_counter}\n"
+                    f"Reward: {round(reward, 2)}\n"
+                    f"Avg Reward: {avg_reward}\n"
+                    f"Epsilon Threshold: {agent.epsilon_threshold}\n")
+
+        record_env = gym.make("CarRacing-v2", render_mode='rgb_array', continuous=False)
+        record_env = GrayScaleObservation(record_env)
+        record_env = ResizeObservation(record_env, (84, 84))
+        record_env = FrameStack(record_env, 4)
+        record_env = RecordVideo(record_env, video_folder=video_dir, episode_trigger=lambda ep: ep == 0, disable_logger=True)
+        
+        state, _ = record_env.reset()
+        state = torch.tensor(np.array(state), dtype=torch.float32).unsqueeze(0).to(device) / 255.0
+
+        done = False
+        while not done:
+            action = agent.select_action(state)
+            next_state, reward, done, truncated, _ = record_env.step(action)
+            next_state = torch.tensor(np.array(next_state), dtype=torch.float32).unsqueeze(0).to(device) / 255.0
+            done = done or truncated
+            state = next_state
+
+        record_env.close()
+        print("Video Saved")
 
     # Update the plot after each episode
     update_plot(episode_rewards, window=50)
