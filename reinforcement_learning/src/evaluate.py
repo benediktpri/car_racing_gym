@@ -12,7 +12,8 @@ env = ResizeObservation(env, (84, 84))
 env = FrameStack(env, 4)
 
 # Load the trained model
-model_path = 'reinforcement_learning/models/kaggle/20240708_reinforcement_learning/models/training_20240708_181819/final_dqn_model.pth'
+#model_path = 'reinforcement_learning/models/training_20240713_132439/final_dqn_model.pth'
+model_path= 'reinforcement_learning/models/kaggle/20240810_reinforcement_learning/models/training_20240810_210456/dqn_model_4750_episodes.pth'
 
 num_actions = env.action_space.n
 model = load_model(model_path, num_actions)

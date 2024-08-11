@@ -16,8 +16,8 @@ import math
 import logging
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-# print(device)
+#device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+print(device)
 
 # new directory for this training session within reinforcement_learning/models/ and setup for logging
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -35,7 +35,7 @@ env = FrameStack(env, 4)
 # Replay Buffer
 class ReplayBuffer:
     def __init__(self, capacity):
-        self.buffer = deque(maxlen=capacity)  # Use deque for efficient FIFO operation
+        self.buffer = deque(maxlen=capacity)
 
     def add(self, state, action, reward, next_state, done):
         experience = (state, action, reward, next_state, done)
@@ -66,8 +66,7 @@ class Agent:
     def __init__(self, num_actions, buffer_size, batch_size, gamma, epsilon_start, epsilon_end, epsilon_decay, target_update_frequency):
         self.current_step = 0
         self.num_actions = num_actions
-        self.gamma = gamma  # Discount factor for future rewards
-        # self.epsilon = epsilon_start
+        self.gamma = gamma
         self.epsilon_start = epsilon_start
         self.epsilon_end = epsilon_end
         self.epsilon_decay = epsilon_decay
@@ -77,18 +76,18 @@ class Agent:
         self.policy_net = DQN(num_actions).to(device)
         self.target_net = DQN(num_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
-        self.target_net.eval()  # Set the target network to eval mode
+        self.target_net.eval()
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=0.001)
         self.target_update_frequency = target_update_frequency
 
     def select_action(self, state):
-        # Update epsilon with new decay rate 1000
+        # Update epsilon with new decay rate
         eps_threshold = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * \
         math.exp(-1. * self.current_step / self.epsilon_decay)
         self.epsilon_threshold = eps_threshold
         self.current_step += 1
         # Epsilon-greedy policy
-        if random.random() < eps_threshold:#self.epsilon:
+        if random.random() < eps_threshold:
             return random.randrange(self.num_actions)  # Explore
         else:
             with torch.no_grad():
@@ -128,7 +127,6 @@ BATCH_SIZE = 64
 GAMMA = 0.99
 EPSILON_START = 1.0
 EPSILON_END = 0.01
-# EPSILON_DECAY = 0.995
 EPSILON_DECAY = 100000  # Control the rate of decay
 TARGET_UPDATE = 1000  # Update target network every 1000 steps
 
@@ -141,7 +139,7 @@ agent = Agent(num_actions=env.action_space.n, buffer_size=BUFFER_SIZE, batch_siz
 plt.ion()
 plt.figure(figsize=(12, 6))
 
-# main training loop
+# Main training loop
 num_episodes = 1000  # Total number of episodes to train
 save_interval = 100  # How often to save the model
 print_every = 10     # How often to print the average reward
@@ -156,8 +154,8 @@ def capped_cubic_video_schedule(episode_id: int) -> bool:
         return episode_id % 50 == 0
     
 for episode in range(num_episodes):
-    state, _ = env.reset()  # Reset the environment and obtain the initial state
-    state = torch.tensor(np.array(state), dtype=torch.float32).unsqueeze(0).to(device) / 255.0  # Process state for DQN input
+    state, _ = env.reset()
+    state = torch.tensor(np.array(state), dtype=torch.float32).unsqueeze(0).to(device) / 255.0 
     total_reward = 0
     done = False
 
@@ -167,11 +165,11 @@ for episode in range(num_episodes):
 
     # Initial 50-step delay
     for _ in range(50):
-        next_state, reward, done, truncated, _ = env.step(0)  # Perform a no-op action
+        next_state, reward, done, truncated, _ = env.step(0) 
         if done or truncated:
-            break  # Exit the delay loop if the episode ends prematurely
-        state = torch.tensor(np.array(next_state), dtype=torch.float32).unsqueeze(0).to(device) / 255.0  # Process state
-
+            break 
+        state = torch.tensor(np.array(next_state), dtype=torch.float32).unsqueeze(0).to(device) / 255.0
+    
     while not done:
         action = agent.select_action(state)  # Select an action using the policy net
         next_state, reward, done, truncated, _ = env.step(action)  # Execute the action
@@ -208,10 +206,6 @@ for episode in range(num_episodes):
 
         if agent.current_step % agent.target_update_frequency == 0:
             agent.update_target_network()
-    
-    # Update epsilon after each episode
-    # agent.epsilon = max(agent.epsilon_end, agent.epsilon * agent.epsilon_decay)
-    # print(f"Epsilon set to: {agent.epsilon}")
 
     episode_rewards.append(total_reward)  # Append total reward for this episode
     epsilon_values.append(agent.epsilon_threshold)

@@ -29,5 +29,5 @@ class DQN(nn.Module):
         x = F.relu(self.conv3(x))  # Apply ReLU activation after conv3
         x = x.view(x.size(0), -1)  # Flatten the output for the dense layers
         x = F.relu(self.fc1(x))    # Apply ReLU activation after fc1
-        x = self.fc2(x)            # Output layer (no activation here, as it's usually handled by the loss function)
+        x = self.fc2(x)            # Output layer
         return x
