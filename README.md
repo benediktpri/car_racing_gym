@@ -70,9 +70,16 @@ It can be seen that after minimal progress in the beginning, the agent begins to
 While this plot provides a good initial impression of the training progress, a better understanding is possible by examining examples of the car's driving performance in different episodes. From another training run during which videos were recorded, three examples have been chosen to demonstrate the agent's progress.
 
 
+
+https://github.com/user-attachments/assets/518eeb9f-d2ba-425e-8e2d-43f5188b25e7
+
 Episode 350: The agent does not move yet and is not collecting rewards.
 
+https://github.com/user-attachments/assets/7521c91a-19cb-45f5-aeee-e0e06fce0616
+
 Episode 500: The agent has learned to drive forward; however, it is still rather slow and occasionally turns its wheels randomly.
+
+https://github.com/user-attachments/assets/d14f8145-35f2-48ed-b148-d6127f211a24
 
 Episode 950: The agent drives confidently and quickly forward. At the curve, the car does not turn and goes off track. 
 
